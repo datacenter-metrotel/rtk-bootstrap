@@ -1,9 +1,10 @@
 # install-rtk
 
-Instalador completo de **rtk (Rust Token Killer)** para **Ubuntu 24.04**.
+Instalador completo de **rtk (Rust Token Killer)** para distribuciones
+**Debian-based**. Probado en **Ubuntu 24.04**, **Debian 13** y **Kali Linux**.
 
-Instala rtk de verdad, lo integra con Claude Code y lo deja **probado con un test**
-antes de darte el visto bueno. Un solo comando.
+Instala rtk de verdad, lo integra con **Claude Code y Gemini CLI** y lo deja
+**probado con un test** antes de darte el visto bueno. Un solo comando.
 
 Repositorio oficial de rtk: <https://github.com/rtk-ai/rtk>
 
@@ -21,7 +22,9 @@ Repositorio oficial de rtk: <https://github.com/rtk-ai/rtk>
    `~/.bashrc`, de forma idempotente.
 5. **Instala `ccusage`** para `rtk cc-economics` (opcional), arreglando el prefijo
    de npm en `$HOME` para evitar el error `EACCES` sin usar `sudo`.
-6. **Integra el hook de Claude Code** (`rtk init`) y lo verifica (`rtk verify`).
+6. **Integra los hooks de los agentes** — por defecto **Claude Code** (`rtk init`)
+   **y Gemini CLI** (`rtk init -g --gemini`); configurable con `--target`. Verifica
+   con `rtk verify`.
 7. **Ejecuta una batería de tests** que confirma que rtk funciona de verdad.
 8. Imprime un **resumen y un veredicto final**.
 
@@ -48,7 +51,8 @@ impostor falla.
 
 ## Requisitos previos
 
-- Ubuntu 24.04 (probado acá; funciona en otras distros Debian-based).
+- Ubuntu 24.04, Debian 13 o Kali Linux (probado en las tres; debería funcionar en
+  otras distros Debian-based con `apt`).
 - Acceso a internet.
 - `sudo` disponible **solo si** hay que instalar paquetes de sistema (Rust,
   build-essential) para el fallback de compilación. Si el instalador oficial
@@ -60,11 +64,13 @@ impostor falla.
 ```bash
 chmod +x install-rtk.sh
 
-./install-rtk.sh                 # instalación + integración + test
-./install-rtk.sh --check         # solo diagnóstico y lista de dependencias
-./install-rtk.sh --yes           # desatendido (no pregunta confirmaciones)
-./install-rtk.sh --method cargo   # fuerza el método (auto|script|cargo)
-./install-rtk.sh --no-ccusage    # omite ccusage
+./install-rtk.sh                  # instala + integra Claude Code y Gemini CLI + test
+./install-rtk.sh --target claude  # integra solo Claude Code
+./install-rtk.sh --target gemini  # integra solo Gemini CLI
+./install-rtk.sh --check          # solo diagnóstico y lista de dependencias
+./install-rtk.sh --yes            # desatendido (no pregunta confirmaciones)
+./install-rtk.sh --method cargo    # fuerza el método (auto|script|cargo)
+./install-rtk.sh --no-ccusage     # omite ccusage
 ```
 
 Al terminar, recargá la shell:
@@ -83,6 +89,10 @@ source ~/.bashrc
 
 ## Notas
 
+- **Agentes soportados.** Por defecto integra Claude Code (`rtk init`) y Gemini CLI
+  (`rtk init -g --gemini`). El hook de cada uno se instala aunque el agente no esté
+  presente todavía; empezará a funcionar cuando lo instales y lo reinicies. rtk NO
+  soporta Claude Desktop de forma nativa (eso requiere un puente MCP aparte).
 - **`cc-economics` es opcional.** Si falla por una versión de `ccusage` cuyo JSON
   cambió de formato (`missing field 'month'`), **no afecta** el filtrado ni el hook.
 - **El hook es lo que importa**: con `rtk verify` en `PASS`, el ahorro en Claude

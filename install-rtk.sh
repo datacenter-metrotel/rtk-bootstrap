@@ -12,12 +12,14 @@
 # Además:
 #   - Avisa de TODAS las dependencias previas antes de tocar el sistema.
 #   - Configura npm en $HOME (evita EACCES sin sudo) e instala ccusage.
-#   - Integra el hook de Claude Code (rtk init).
+#   - Integra los hooks de Claude Code Y Gemini CLI (por defecto, ambos).
 #   - Deja rtk PROBADO con un test real al final (distingue el RTK correcto del
 #     impostor "Rust Type Kit" usando 'rtk gain').
 #
 # Uso:
-#   ./install-rtk.sh                 # instalación + integración + test
+#   ./install-rtk.sh                 # instala + integra Claude Code y Gemini CLI + test
+#   ./install-rtk.sh --target claude # integra solo Claude Code
+#   ./install-rtk.sh --target gemini # integra solo Gemini CLI
 #   ./install-rtk.sh --check         # solo diagnóstico / lista de dependencias
 #   ./install-rtk.sh --yes           # no pregunta confirmaciones (modo desatendido)
 #   ./install-rtk.sh --method cargo  # fuerza método: auto|script|cargo
@@ -57,17 +59,24 @@ CHECK_ONLY=0
 ASSUME_YES=0
 METHOD="auto"      # auto | script | cargo
 SKIP_CCUSAGE=0
+TARGET="both"      # both | claude | gemini
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --check)      CHECK_ONLY=1; shift ;;
     --yes|-y)     ASSUME_YES=1; shift ;;
     --method)     METHOD="${2:-auto}"; shift 2 ;;
+    --target)     TARGET="${2:-both}"; shift 2 ;;
     --no-ccusage) SKIP_CCUSAGE=1; shift ;;
-    -h|--help)    grep '^#' "$0" | sed 's/^# \{0,1\}//' | head -28; exit 0 ;;
+    -h|--help)    grep '^#' "$0" | sed 's/^# \{0,1\}//' | head -30; exit 0 ;;
     *) err "Argumento desconocido: $1"; exit 1 ;;
   esac
 done
+
+case "$TARGET" in
+  both|claude|gemini) ;;
+  *) err "Valor inválido para --target: '$TARGET' (usá both|claude|gemini)"; exit 1 ;;
+esac
 
 confirm() {
   # confirm "pregunta" -> 0 si sí
@@ -117,6 +126,12 @@ Este instalador puede necesitar lo siguiente. Te aviso ANTES de tocar nada:
     - $RTK_REPO
     - Nunca se usa 'cargo install rtk' pelado: en crates.io existe un paquete
       homónimo equivocado ("Rust Type Kit"). Siempre se usa la URL del repo.
+
+  Agentes a integrar (según --target, por defecto 'both'):
+    - Claude Code  -> hook vía 'rtk init'
+    - Gemini CLI   -> hook vía 'rtk init -g --gemini'
+    - El hook de cada agente se instala aunque el agente no esté presente todavía;
+      empezará a funcionar cuando lo instales y reinicies.
 EOF
 echo
 
@@ -314,29 +329,50 @@ else
 fi
 
 # ===========================================================================
-# 6. Integración con Claude Code (hook)
+# 6. Integración con agentes (Claude Code y/o Gemini CLI)
 # ===========================================================================
-step "6/8  Integración con Claude Code (rtk init)"
+step "6/8  Integración con agentes (target: $TARGET)"
+
+# Decide qué agentes integrar según el flag
+DO_CLAUDE=0; DO_GEMINI=0
+case "$TARGET" in
+  both)   DO_CLAUDE=1; DO_GEMINI=1 ;;
+  claude) DO_CLAUDE=1 ;;
+  gemini) DO_GEMINI=1 ;;
+esac
+
+# integra_agente <nombre> <init-args...>  -> setea STATUS["hook_<nombre>"]
+integra_agente() {
+  local nombre="$1"; shift
+  info "Integrando $nombre  ->  rtk init $*"
+  if rtk init "$@" >/dev/null 2>&1; then
+    ok "$nombre: hook instalado (rtk init $*)."
+  else
+    warn "$nombre: 'rtk init $*' devolvió error (¿ya inicializado / fuera de proyecto?)."
+  fi
+}
 
 if [[ "$CHECK_ONLY" -eq 1 ]]; then
-  info "(check) Se correría 'rtk init' para registrar el hook PreToolUse."
+  [[ "$DO_CLAUDE" -eq 1 ]] && info "(check) Claude Code:  rtk init"
+  [[ "$DO_GEMINI" -eq 1 ]] && info "(check) Gemini CLI:  rtk init -g --gemini"
   set_status "hook_init" "SKIP"
 elif ! have rtk; then
-  err "rtk no disponible: no se puede integrar el hook."
+  err "rtk no disponible: no se pueden integrar los hooks."
   set_status "hook_init" "FAIL"
 else
-  if rtk init >/dev/null 2>&1; then
-    ok "rtk init ejecutado (hook + instrucciones en CLAUDE.md)."
-  else
-    warn "rtk init devolvió error (¿ya inicializado / fuera de proyecto?)."
-  fi
+  # Claude Code: rtk init (sin args extra)
+  [[ "$DO_CLAUDE" -eq 1 ]] && integra_agente "Claude Code"
+  # Gemini CLI: rtk init -g --gemini
+  [[ "$DO_GEMINI" -eq 1 ]] && integra_agente "Gemini CLI" -g --gemini
+
+  # Verificación común (rtk verify chequea el binario y los hooks registrados)
   VERIFY_OUT="$(rtk verify 2>&1)"
   echo "$VERIFY_OUT"
   if echo "$VERIFY_OUT" | grep -qiE 'PASS|registered|tests passed'; then
-    ok "Hook verificado (rtk verify)."
+    ok "Hooks verificados (rtk verify)."
     set_status "hook_init" "PASS"
   else
-    warn "rtk verify no reportó PASS. Revisá settings.json."
+    warn "rtk verify no reportó PASS. Revisá la config de hooks."
     set_status "hook_init" "WARN"
   fi
 fi
@@ -439,5 +475,9 @@ echo
 info "Recargá tu shell para tomar los PATH nuevos:"
 echo "    source ~/.bashrc"
 echo
-info "El hook hará el ahorro automático en Claude Code (reabrí tu sesión)."
+case "$TARGET" in
+  both)   info "El hook hará el ahorro automático en Claude Code y Gemini CLI (reabrí cada uno)." ;;
+  claude) info "El hook hará el ahorro automático en Claude Code (reabrí tu sesión)." ;;
+  gemini) info "El hook hará el ahorro automático en Gemini CLI (reabrí tu sesión)." ;;
+esac
 exit "$RC"
